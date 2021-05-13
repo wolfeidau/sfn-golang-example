@@ -108,7 +108,7 @@ func handleInvalidName(evt *SFNEvent) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []byte(fmt.Sprintf(`{"error": "validate name failed for: %s"}`, params.Name)), nil
+	return []byte(fmt.Sprintf(`{"message": "validate name failed for: %s"}`, params.Name)), nil
 }
 
 func handleValidateName(evt *SFNEvent) ([]byte, error) {
