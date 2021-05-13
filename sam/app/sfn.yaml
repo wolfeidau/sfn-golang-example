@@ -1,0 +1,191 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Sample AWS Step Function app
+
+Parameters:
+  Stage:
+    Type: String
+    Description: The stage where the stac is running in, e.g., dev, prod.
+    Default: dev
+  Branch:
+    Type: String
+    Description: The branch the stack was deployed.
+    Default: master
+  Commit:
+    Type: String
+  LogLevel:
+    Type: String
+    Default: info
+    AllowedValues: ["trace", "debug", "info", "warn", "error", "fatal", "panic"]
+
+Conditions:
+  IsDev: !Equals [!Ref Stage, "dev"]
+  IsProd: !Equals [!Ref Stage, "prod"]
+
+Globals:
+  Function:
+    Runtime: go1.x
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        BRANCH: !Ref Branch
+        LOG_LEVEL: !Ref LogLevel
+        COMMIT: !Ref Commit
+        AWS_ACCOUNT_ID: !Ref "AWS::AccountId"
+        RAW_EVENT_LOGGING: !If [IsDev, "true", "false"]
+
+Resources:
+  NameFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${NameFunction}"
+      RetentionInDays: !If [IsProd, 365, 14]
+
+  NameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Validate name
+      CodeUri: ../../dist/handler.zip
+      Handler: name-sfn-lambda
+
+  ResultQueue:
+    Type: AWS::SQS::Queue
+
+  ResultTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !GetAtt ResultQueue.Arn
+          Protocol: sqs
+
+  AllowTopicToPublishOnQueue:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref ResultQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "sqs:SendMessage"
+            Principal: "*"
+            Resource: !GetAtt ResultQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref ResultTopic
+
+  StepFunctionsServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: !Join ["", ["/", !Ref "AWS::StackName", "/"]]
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AllowStepFunctionsServiceToAssumeRole"
+            Effect: "Allow"
+            Action:
+              - "sts:AssumeRole"
+            Principal:
+              Service:
+                - !Sub "states.${AWS::Region}.amazonaws.com"
+      Policies:
+        - PolicyName: "InvokeFunctions"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource:
+                  - !Sub ${NameFunction.Arn}
+        - PolicyName: "Publish2Topic"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "sns:Publish"
+                Resource:
+                  - !Ref ResultTopic
+
+  GreetByNameStateMachine:
+    Type: "AWS::StepFunctions::StateMachine"
+    Properties:
+      RoleArn: !GetAtt StepFunctionsServiceRole.Arn
+      DefinitionString: !Sub |-
+        {
+            "Comment": "Greeting by Name",
+            "StartAt": "ValidateName",
+            "States": {
+                "ValidateName": {
+                    "Type": "Task",
+                    "Resource": "${NameFunction.Arn}",
+                    "Parameters": {
+                      "Input.$": "$",
+                      "Path.$": "$$.State.Name"
+                    },                    
+                    "Catch": [
+                        {
+                            "ErrorEquals": [
+                                "NameValidationError"
+                            ],
+                            "Next": "InvalidName"
+                        }
+                    ],
+                    "Next": "GreetName"
+                },
+                "InvalidName": {
+                    "Type": "Task",
+                    "Resource": "${NameFunction.Arn}",
+                    "Parameters": {
+                      "Input.$": "$",
+                      "Path.$": "$$.State.Name"
+                    },                    
+                    "Next": "Publish2SNS"
+                },
+                "GreetName": {
+                    "Type": "Task",
+                    "Resource": "${NameFunction.Arn}",
+                    "Parameters": {
+                      "Input.$": "$",
+                      "Path.$": "$$.State.Name"
+                    },                    
+                    "Next": "Publish2SNS"
+                },
+                "Publish2SNS": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::sns:publish",
+                    "Parameters": {
+                        "TopicArn": "${ResultTopic}",
+                        "Message.$": "$.message",
+                        "MessageAttributes": {
+                            "Attribute1": {
+                                "DataType": "String",
+                                "StringValue": "value of my attribute no 1"
+                            },
+                            "Attribute2": {
+                                "DataType": "String",
+                                "StringValue": "value of my attribute no 2"
+                            }
+                        }
+                    },
+                    "End": true
+                }
+            }
+        }
+
+Outputs:
+  GreetByNameStateMachine:
+    Description: Demo greet by name state machine
+    Value: !Ref GreetByNameStateMachine
+  ResultTopicName:
+    Description: Result SNS Topic Name
+    Value: !Ref ResultTopic
+
+  ResultQueueUrl:
+    Description: Result SQS Queue URL
+    Value: !Ref ResultQueue
