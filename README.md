@@ -29,12 +29,19 @@ You can then run the AWS CLI to start an execution, this one has a good name.
 ```
 AWS_REGION=ap-southeast-2 AWS_PROFILE=myprofile aws stepfunctions start-execution --state-machine-arn YOUR_ARN_HERE --name $(uuidgen) --input '{"Name":"Mark"}'
 ```
+This results in an execution which flows without error from [Validate Name](cmd/name-sfn-lambda/main.go#L114-L125) function, onto [Greet Name](https://github.com/wolfeidau/sfn-golang-example/blob/master/cmd/name-sfn-lambda/main.go#L127-L136).
+
+![Good Name Execution](docs/images/good_name.png)
 
 You can then run the AWS CLI to start an execution, this one has a bad name, which will trigger an error condition.
 
 ```
 AWS_REGION=ap-southeast-2 AWS_PROFILE=myprofile aws stepfunctions start-execution --state-machine-arn YOUR_ARN_HERE --name $(uuidgen) --input '{"Name":"Anton"}'
 ```
+
+This results in an execution with an error triggered in the [Validate Name](cmd/name-sfn-lambda/main.go#L114-L125) function, which is then routed to the [Invalid Name](https://github.com/wolfeidau/sfn-golang-example/blob/master/cmd/name-sfn-lambda/main.go#L106-L112) function.
+
+![Bad Name Execution](docs/images/bad_name.png)
 
 # License
 
