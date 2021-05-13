@@ -32,7 +32,7 @@ func NewNameValidationError(msg string) error {
 
 // NameValidationError Used to provide a custom error to step functions, one thing to note
 // is the name of the error is what matters in the step function
-type NameValidationError struct{
+type NameValidationError struct {
 	msg string
 }
 
@@ -134,4 +134,3 @@ func handleGreetName(evt *SFNEvent) ([]byte, error) {
 
 	return []byte(fmt.Sprintf(`{"message": "hello %s"}`, params.Name)), nil
 }
-
