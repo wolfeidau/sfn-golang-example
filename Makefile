@@ -2,7 +2,7 @@ APPNAME := aws-sfn-golang
 STAGE ?= dev
 BRANCH ?= master
 
-GOLANGCI_VERSION = 1.32.0
+GOLANGCI_VERSION = v1.51.2
 
 BIN_DIR ?= $(shell pwd)/bin
 
@@ -19,7 +19,7 @@ LDFLAGS := -ldflags="-s -w -X main.version=${GIT_HASH}"
 $(BIN_DIR)/golangci-lint: $(BIN_DIR)/golangci-lint-${GOLANGCI_VERSION}
 	@ln -sf golangci-lint-${GOLANGCI_VERSION} $(BIN_DIR)/golangci-lint
 $(BIN_DIR)/golangci-lint-${GOLANGCI_VERSION}:
-	@curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | BINARY=golangci-lint bash -s -- v${GOLANGCI_VERSION}
+	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s $(GOLANGCI_VERSION)
 	@mv $(BIN_DIR)/golangci-lint $@
 
 clean:
