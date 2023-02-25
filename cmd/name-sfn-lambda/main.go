@@ -78,7 +78,7 @@ func main() {
 	}
 
 	// register our lambda handler with the middleware configured
-	lambda.StartHandler(ch.ThenFunc(processEvent))
+	lambda.StartWithOptions(ch.ThenFunc(processEvent))
 }
 
 func processEvent(ctx context.Context, payload []byte) ([]byte, error) {
